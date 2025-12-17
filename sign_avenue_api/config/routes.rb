@@ -6,6 +6,8 @@ Rails.application.routes.draw do
 
       # User Accounts (signup)
       resources :users, only: [:create]
+      post "users/verify-email", to: "users#verify_email"
+      post "users/resend-confirmation-code", to: "users#resend_confirmation_code"
 
       # Login
       post "login", to: "sessions#create"

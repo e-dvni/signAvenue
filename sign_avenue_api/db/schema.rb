@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2025_12_12_180229) do
+ActiveRecord::Schema[8.1].define(version: 2025_12_17_213251) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -70,11 +70,20 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_12_180229) do
   create_table "users", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "email"
+    t.string "email_confirmation_code_digest"
+    t.datetime "email_confirmation_expires_at"
+    t.integer "email_confirmation_send_count", default: 0, null: false
+    t.datetime "email_confirmation_sent_at"
+    t.datetime "email_confirmation_window_started_at"
+    t.datetime "email_confirmed_at"
+    t.string "first_name"
+    t.string "last_name"
     t.string "name"
     t.string "password_digest"
-    t.string "role"
+    t.string "role", default: "customer"
     t.datetime "updated_at", null: false
     t.index ["email"], name: "index_users_on_email", unique: true
+    t.index ["email_confirmed_at"], name: "index_users_on_email_confirmed_at"
   end
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
