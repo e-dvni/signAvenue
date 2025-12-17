@@ -1,6 +1,9 @@
 class Project < ApplicationRecord
   belongs_to :user
 
+  # Project-related uploads (drawings, proofs, photos, invoices, etc.)
+  has_many_attached :files
+
   # You can tweak these later if you want more/less states
   STATUSES = %w[
     draft

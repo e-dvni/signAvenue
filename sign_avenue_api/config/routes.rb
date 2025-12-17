@@ -14,7 +14,9 @@ Rails.application.routes.draw do
       get "me", to: "users#me"
 
       # Customer projects
-      resources :projects, only: [:index, :show, :update]
+      resources :projects, only: [:index, :show, :update] do
+        resources :files, controller: "project_files", only: [:index, :show]
+      end
 
       # Customer schedule view (read-only availability)
       get "schedule", to: "schedule#index"
@@ -22,7 +24,10 @@ Rails.application.routes.draw do
       # Admin namespace
       namespace :admin do
         resources :contact_requests, only: [:index, :show, :update]
-        resources :projects, only: [:index, :show, :update]
+
+        resources :projects, only: [:index, :show, :update] do
+          resources :files, controller: "project_files", only: [:index, :show, :create, :destroy]
+        end
 
         # Installation schedule overview
         get "schedule", to: "schedule#index"

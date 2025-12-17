@@ -12,6 +12,7 @@ import Login from "./pages/Login";
 // Customer pages
 import Dashboard from "./pages/Dashboard";
 import ProjectDetail from "./pages/ProjectDetail";
+import CustomerProjectFiles from "./pages/CustomerProjectFiles";
 import CustomerSchedule from "./pages/CustomerSchedule";
 import CustomerDayDetail from "./pages/CustomerDayDetail";
 
@@ -19,6 +20,7 @@ import CustomerDayDetail from "./pages/CustomerDayDetail";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminContactRequests from "./pages/AdminContactRequests";
 import AdminProjects from "./pages/AdminProjects";
+import AdminProjectFiles from "./pages/AdminProjectFiles";
 import AdminSchedule from "./pages/AdminSchedule";
 
 import NotFound from "./pages/NotFound";
@@ -45,6 +47,8 @@ function App() {
             </ProtectedRoute>
           }
         />
+
+        {/* Customer: project detail + files */}
         <Route
           path="projects/:id"
           element={
@@ -53,7 +57,16 @@ function App() {
             </ProtectedRoute>
           }
         />
-        {/* main schedule page (list/calendar) */}
+        <Route
+          path="projects/:id/files"
+          element={
+            <ProtectedRoute>
+              <CustomerProjectFiles />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Customer schedule page (list/calendar) */}
         <Route
           path="my-schedule"
           element={
@@ -98,6 +111,8 @@ function App() {
             </ProtectedRoute>
           }
         />
+
+        {/* Admin: projects + files */}
         <Route
           path="admin/projects"
           element={
@@ -106,6 +121,15 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="admin/projects/:id/files"
+          element={
+            <ProtectedRoute>
+              <AdminProjectFiles />
+            </ProtectedRoute>
+          }
+        />
+
         <Route
           path="admin/schedule"
           element={

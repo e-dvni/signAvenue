@@ -1,430 +1,303 @@
-// src/pages/Dashboard.jsx
-import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../hooks/useAuth";
+import React, { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
-// Helper: parse a DATE-only string "YYYY-MM-DD" as a local Date
-const parseLocalDateFromISO = (dateStr) => {
-  if (!dateStr) return null;
-  const [y, m, d] = dateStr.split("-").map((v) => parseInt(v, 10));
-  if (!y || !m || !d) return null;
-  return new Date(y, m - 1, d);
+// If you already have an api helper, import it instead.
+// Example: import api from "../lib/api";
+async function apiFetch(path, options = {}) {
+  const token = localStorage.getItem("token"); // adjust if you store auth differently
+  const res = await fetch(path, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    },
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Request failed: ${res.status}`);
+  }
+
+  // Some endpoints might return 204
+  const contentType = res.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) return null;
+  return res.json();
+}
+
+const STATUS_LABELS = {
+  draft: "Draft",
+  in_progress: "In progress",
+  ready_for_install: "Ready for install",
+  completed: "Completed",
 };
 
-const Dashboard = () => {
-  const { user, token } = useAuth();
-  const navigate = useNavigate();
-
+export default function Dashboard() {
   const [projects, setProjects] = useState([]);
-  const [contactRequests, setContactRequests] = useState([]);
+  const [expandedId, setExpandedId] = useState(null);
+
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("created_at_desc");
+
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [cancelingProjectId, setCancelingProjectId] = useState(null);
+  const [error, setError] = useState("");
+
+  // If you later add a cancel flow, keep this; for now we won’t define unused state.
+  // const [cancelingProjectId, setCancelingProjectId] = useState(null);
 
   useEffect(() => {
-    const fetchData = async () => {
-      if (!token) {
-        setLoading(false);
-        return;
-      }
+    let mounted = true;
 
+    async function load() {
       try {
         setLoading(true);
+        setError("");
 
-        // Load customer projects
-        const projRes = await fetch("http://localhost:3000/api/v1/projects", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        // Customer projects endpoint (should already be scoped to current user)
+        const data = await apiFetch("/api/v1/projects");
+        if (!mounted) return;
 
-        const projData = await projRes.json();
-        if (!projRes.ok) {
-          throw new Error(projData.error || "Failed to load projects");
-        }
-
-        setProjects(projData || []);
-
-        // Load customer's contact/inquiry records
-        const contactRes = await fetch(
-          "http://localhost:3000/api/v1/contact_requests",
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-
-        if (contactRes.ok) {
-          const contactData = await contactRes.json();
-          setContactRequests(contactData || []);
-        } else {
-          setContactRequests([]);
-        }
-      } catch (err) {
-        console.error(err);
-        setError("Unable to load your dashboard data.");
+        // normalize expected payload shapes: either {projects: []} or []
+        const list = Array.isArray(data) ? data : data?.projects || [];
+        setProjects(list);
+      } catch (e) {
+        if (!mounted) return;
+        setError(e.message || "Failed to load projects.");
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const filteredAndSorted = useMemo(() => {
+    const q = query.trim().toLowerCase();
+
+    let list = [...projects];
+
+    // filter: search
+    if (q) {
+      list = list.filter((p) => {
+        const name = (p.name || p.title || "").toLowerCase();
+        return name.includes(q);
+      });
+    }
+
+    // filter: status
+    if (statusFilter !== "all") {
+      list = list.filter((p) => (p.status || "").toLowerCase() === statusFilter);
+    }
+
+    // sort + "completed to bottom" rule
+    const isCompleted = (p) => (p.status || "").toLowerCase() === "completed";
+
+    const compare = (a, b) => {
+      // Always push completed to bottom
+      const ac = isCompleted(a);
+      const bc = isCompleted(b);
+      if (ac !== bc) return ac ? 1 : -1;
+
+      const aname = (a.name || a.title || "").toLowerCase();
+      const bname = (b.name || b.title || "").toLowerCase();
+
+      const aCreated = new Date(a.created_at || 0).getTime();
+      const bCreated = new Date(b.created_at || 0).getTime();
+
+      const aInstall = new Date(a.install_date || a.installAt || 0).getTime();
+      const bInstall = new Date(b.install_date || b.installAt || 0).getTime();
+
+      switch (sortBy) {
+        case "name_asc":
+          return aname.localeCompare(bname);
+        case "name_desc":
+          return bname.localeCompare(aname);
+        case "status_asc":
+          return (a.status || "").localeCompare(b.status || "");
+        case "status_desc":
+          return (b.status || "").localeCompare(a.status || "");
+        case "install_date_asc":
+          return aInstall - bInstall;
+        case "install_date_desc":
+          return bInstall - aInstall;
+        case "created_at_asc":
+          return aCreated - bCreated;
+        case "created_at_desc":
+        default:
+          return bCreated - aCreated;
       }
     };
 
-    fetchData();
-  }, [token]);
+    list.sort(compare);
+    return list;
+  }, [projects, query, statusFilter, sortBy]);
 
-  const upcomingInstallations = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+  function toggleExpand(projectId) {
+    setExpandedId((prev) => (prev === projectId ? null : projectId));
+  }
 
-    return projects
-      .map((p) => {
-        const d = parseLocalDateFromISO(p.install_date);
-        return d
-          ? {
-              ...p,
-              installDateObj: d,
-            }
-          : null;
-      })
-      .filter((p) => p && p.installDateObj >= today)
-      .sort((a, b) => a.installDateObj - b.installDateObj);
-  }, [projects]);
-
-  const nextInstallation = upcomingInstallations[0] || null;
-
-  const handleOpenScheduleForProject = (projectId) => {
-    navigate("/schedule", {
-      state: { projectId },
-    });
-  };
-
-  const handleCancelInstall = async (project) => {
-    if (!token) return;
-    const confirmed = window.confirm(
-      "Are you sure you want to cancel this installation appointment?"
-    );
-    if (!confirmed) return;
-
-    setError(null);
-    setCancelingProjectId(project.id);
-
-    try {
-      const res = await fetch(
-        `http://localhost:3000/api/v1/projects/${project.id}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            project: {
-              install_date: null,
-              install_slot: null,
-            },
-          }),
-        }
-      );
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to cancel appointment.");
-      }
-
-      // Update local projects
-      setProjects((prev) =>
-        prev.map((p) => (p.id === data.id ? data : p))
-      );
-    } catch (err) {
-      console.error(err);
-      setError(
-        err.message ||
-          "Unable to cancel this appointment. Please try again."
-      );
-    } finally {
-      setCancelingProjectId(null);
-    }
-  };
-
-  if (!user) {
-    return (
-      <section className="admin-page">
-        <div className="admin-page-inner">
-          <h1>Customer Dashboard</h1>
-          <p>You need to be logged in to view your dashboard.</p>
-        </div>
-      </section>
-    );
+  function handleOpenScheduleForProject(project) {
+    // If you already have a schedule route, link there instead.
+    // Example: navigate(`/schedule?projectId=${project.id}`)
+    alert(`Schedule install for: ${project.name || project.title || "Project"} (id: ${project.id})`);
   }
 
   if (loading) {
     return (
-      <section className="admin-page">
-        <div className="admin-page-inner">
-          <p>Loading your dashboard...</p>
-        </div>
-      </section>
+      <div style={{ padding: 24 }}>
+        <h1>Dashboard</h1>
+        <p>Loading projects…</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ padding: 24 }}>
+        <h1>Dashboard</h1>
+        <p style={{ color: "crimson" }}>{error}</p>
+      </div>
     );
   }
 
   return (
-    <section className="admin-page">
-      <div className="admin-layout">
-        {/* No sidebar for customer yet, re-use admin main card styling */}
-        <div className="admin-main" style={{ gridColumn: "1 / -1" }}>
-          <div className="admin-header">
-            <div>
-              <h1 className="admin-title">Welcome, {user.name}</h1>
-              <p className="admin-subtitle">
-                View your projects, installation schedule, and contact history.
-              </p>
-            </div>
-          </div>
+    <div style={{ padding: 24 }}>
+      <h1>My Projects</h1>
 
-          <div className="admin-content">
-            {error && <div className="admin-error">{error}</div>}
+      {/* Controls */}
+      <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 200px 220px", marginTop: 16 }}>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search by project name…"
+          style={{ padding: 10, borderRadius: 8, border: "1px solid #ccc" }}
+        />
 
-            {/* Summary cards */}
-            <div className="admin-summary-grid">
-              <div className="admin-card">
-                <div className="admin-card-label">Active Projects</div>
-                <div className="admin-card-value">{projects.length}</div>
-                <div className="admin-card-hint">
-                  These are sign projects associated with your account.
-                </div>
-              </div>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          style={{ padding: 10, borderRadius: 8, border: "1px solid #ccc" }}
+        >
+          <option value="all">All statuses</option>
+          <option value="draft">Draft</option>
+          <option value="in_progress">In progress</option>
+          <option value="ready_for_install">Ready for install</option>
+          <option value="completed">Completed</option>
+        </select>
 
-              <div className="admin-card">
-                <div className="admin-card-label">Next Installation</div>
-                {nextInstallation ? (
-                  <>
-                    <div className="admin-card-value">
-                      {nextInstallation.installDateObj.toLocaleDateString(
-                        undefined,
-                        {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        }
-                      )}
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value)}
+          style={{ padding: 10, borderRadius: 8, border: "1px solid #ccc" }}
+        >
+          <option value="created_at_desc">Newest created</option>
+          <option value="created_at_asc">Oldest created</option>
+          <option value="name_asc">Name (A → Z)</option>
+          <option value="name_desc">Name (Z → A)</option>
+          <option value="status_asc">Status (A → Z)</option>
+          <option value="status_desc">Status (Z → A)</option>
+          <option value="install_date_asc">Install date (soonest)</option>
+          <option value="install_date_desc">Install date (latest)</option>
+        </select>
+      </div>
+
+      {/* List */}
+      <div style={{ marginTop: 16, display: "grid", gap: 12 }}>
+        {filteredAndSorted.length === 0 ? (
+          <p>No projects found.</p>
+        ) : (
+          filteredAndSorted.map((p) => {
+            const name = p.name || p.title || `Project #${p.id}`;
+            const status = (p.status || "unknown").toLowerCase();
+            const isExpanded = expandedId === p.id;
+            const canSchedule = status === "ready_for_install";
+
+            return (
+              <div
+                key={p.id}
+                style={{
+                  border: "1px solid #e5e5e5",
+                  borderRadius: 12,
+                  padding: 14,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => toggleExpand(p.id)}
+                  style={{
+                    width: "100%",
+                    background: "transparent",
+                    border: "none",
+                    textAlign: "left",
+                    cursor: "pointer",
+                    padding: 0,
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                    <div>
+                      <div style={{ fontWeight: 700 }}>{name}</div>
+                      <div style={{ fontSize: 13, opacity: 0.75 }}>
+                        Status: {STATUS_LABELS[status] || status}
+                      </div>
                     </div>
-                    <div className="admin-card-hint">
-                      Time:{" "}
-                      {nextInstallation.install_slot
-                        ? nextInstallation.install_slot.toUpperCase()
-                        : "TBD"}
-                      <br />
-                      {nextInstallation.name ||
-                        `Project #${nextInstallation.id}`}{" "}
-                      – {nextInstallation.location}
+                    <div style={{ fontSize: 13, opacity: 0.7 }}>
+                      {p.install_date ? `Install: ${p.install_date}` : ""}
                     </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="admin-card-value">None</div>
-                    <div className="admin-card-hint">
-                      Once an installation is scheduled, it will appear here.
+                  </div>
+                </button>
+
+                {isExpanded && (
+                  <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+                    {/* Example “details” — adjust field names to match your API */}
+                    <div style={{ fontSize: 14, opacity: 0.9 }}>
+                      <div><strong>Created:</strong> {p.created_at || "—"}</div>
+                      <div><strong>Install date:</strong> {p.install_date || "—"}</div>
+                      <div><strong>Notes:</strong> {p.notes || "—"}</div>
                     </div>
-                  </>
-                )}
-              </div>
-            </div>
 
-            {/* Projects list */}
-            <section className="admin-section">
-              <div className="admin-section-header">
-                <h2 className="admin-section-title">Your Projects</h2>
-                <span className="admin-section-badge">
-                  {projects.length}
-                </span>
-              </div>
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                      {/* Files link per project */}
+                      <Link
+                        to={`/projects/${p.id}/files`}
+                        style={{
+                          display: "inline-block",
+                          padding: "8px 12px",
+                          borderRadius: 10,
+                          border: "1px solid #ccc",
+                          textDecoration: "none",
+                        }}
+                      >
+                        View Files
+                      </Link>
 
-              {projects.length === 0 ? (
-                <p className="admin-empty-state">
-                  You don&apos;t have any projects yet. Once we create a
-                  project for your sign, you&apos;ll see it here.
-                </p>
-              ) : (
-                <ul className="admin-list">
-                  {projects.map((p) => {
-                    const hasBooking = !!(p.install_date && p.install_slot);
-                    const canSchedule = p.can_schedule;
-
-                    const installDateObj = parseLocalDateFromISO(
-                      p.install_date
-                    );
-                    const bookingDateLabel =
-                      hasBooking && installDateObj
-                        ? installDateObj.toLocaleDateString(undefined, {
-                            weekday: "short",
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })
-                        : null;
-
-                    return (
-                      <li key={p.id} className="admin-list-item">
-                        <div className="admin-list-item-main">
-                          <p className="admin-list-item-title">
-                            {p.name || `Project #${p.id}`}
-                            {p.status && (
-                              <span className="admin-status-badge">
-                                {p.status}
-                              </span>
-                            )}
-                          </p>
-                          {p.location && (
-                            <p className="admin-list-item-subtitle">
-                              Location: {p.location}
-                            </p>
-                          )}
-
-                          {hasBooking && bookingDateLabel ? (
-                            <p className="admin-list-item-body">
-                              Install scheduled:{" "}
-                              <strong>
-                                {bookingDateLabel} (
-                                {p.install_slot.toUpperCase()})
-                              </strong>
-                            </p>
-                          ) : canSchedule ? (
-                            <p className="admin-list-item-body">
-                              Ready to schedule installation. Choose a date and
-                              time within the next 30 days.
-                            </p>
-                          ) : (
-                            <p className="admin-list-item-body">
-                              We&apos;re still working on this project. Once
-                              it&apos;s marked{" "}
-                              <strong>ready_for_install</strong>, you&apos;ll
-                              be able to schedule your installation.
-                            </p>
-                          )}
-                        </div>
-
-                        <div
+                      {/* Schedule install only when ready_for_install */}
+                      {canSchedule && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenScheduleForProject(p)}
                           style={{
-                            marginTop: "0.5rem",
-                            display: "flex",
-                            flexDirection: "row",
-                            gap: "0.5rem",
-                            flexWrap: "wrap",
+                            padding: "8px 12px",
+                            borderRadius: 10,
+                            border: "1px solid #ccc",
+                            background: "white",
+                            cursor: "pointer",
                           }}
                         >
-                          {/* View project details */}
-                          <Link
-                            to={`/projects/${p.id}`}
-                            className="admin-sidebar-link"
-                          >
-                            View details
-                          </Link>
-
-                          {/* Scheduling controls */}
-                          {canSchedule && !hasBooking && (
-                            <button
-                              type="button"
-                              style={{
-                                borderRadius: "0.5rem",
-                                border: "1px solid #111827",
-                                padding: "0.3rem 0.8rem",
-                                backgroundColor: "#ffffff",
-                                fontSize: "0.8rem",
-                                cursor: "pointer",
-                              }}
-                              onClick={() =>
-                                handleOpenScheduleForProject(p.id)
-                              }
-                            >
-                              Schedule installation
-                            </button>
-                          )}
-
-                          {canSchedule && hasBooking && (
-                            <>
-                              <button
-                                type="button"
-                                style={{
-                                  borderRadius: "0.5rem",
-                                  border: "1px solid #b91c1c",
-                                  padding: "0.3rem 0.8rem",
-                                  backgroundColor: "#ffffff",
-                                  fontSize: "0.8rem",
-                                  color: "#b91c1c",
-                                  cursor:
-                                    cancelingProjectId === p.id
-                                      ? "wait"
-                                      : "pointer",
-                                }}
-                                disabled={cancelingProjectId === p.id}
-                                onClick={() => handleCancelInstall(p)}
-                              >
-                                {cancelingProjectId === p.id
-                                  ? "Canceling..."
-                                  : "Cancel appointment"}
-                              </button>
-                              <span
-                                style={{
-                                  fontSize: "0.75rem",
-                                  color: "#6b7280",
-                                  alignSelf: "center",
-                                }}
-                              >
-                                To reschedule, cancel first, then book a new
-                                date from the Schedule page.
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </section>
-
-            {/* Contact history */}
-            <section className="admin-section">
-              <div className="admin-section-header">
-                <h2 className="admin-section-title">Contact Requests</h2>
-                <span className="admin-section-badge">
-                  {contactRequests.length}
-                </span>
+                          Schedule Installation
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
-
-              {contactRequests.length === 0 ? (
-                <p className="admin-empty-state">
-                  You haven&apos;t submitted any contact or quote forms yet.
-                </p>
-              ) : (
-                <ul className="admin-list">
-                  {contactRequests.map((req) => (
-                    <li key={req.id} className="admin-list-item">
-                      <div className="admin-list-item-main">
-                        <p className="admin-list-item-title">
-                          {req.subject || "Quote / Contact Request"}
-                        </p>
-                        <p className="admin-list-item-subtitle">
-                          Submitted on{" "}
-                          {new Date(req.created_at).toLocaleString()}
-                        </p>
-                        {req.message && (
-                          <p className="admin-list-item-body">
-                            {req.message}
-                          </p>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-          </div>
-        </div>
+            );
+          })
+        )}
       </div>
-    </section>
+    </div>
   );
-};
-
-export default Dashboard;
+}
