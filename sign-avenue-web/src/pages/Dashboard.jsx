@@ -1,29 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useContext } from "react";
 import { Link } from "react-router-dom";
+import { AuthContext } from "../context/AuthContext";
 
-// If you already have an api helper, import it instead.
-// Example: import api from "../lib/api";
-async function apiFetch(path, options = {}) {
-  const token = localStorage.getItem("token"); // adjust if you store auth differently
-  const res = await fetch(path, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options.headers || {}),
-    },
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || `Request failed: ${res.status}`);
-  }
-
-  // Some endpoints might return 204
-  const contentType = res.headers.get("content-type") || "";
-  if (!contentType.includes("application/json")) return null;
-  return res.json();
-}
+const API_BASE = "http://localhost:3000";
 
 const STATUS_LABELS = {
   draft: "Draft",
@@ -33,6 +12,8 @@ const STATUS_LABELS = {
 };
 
 export default function Dashboard() {
+  const { token, loading: authLoading } = useContext(AuthContext);
+
   const [projects, setProjects] = useState([]);
   const [expandedId, setExpandedId] = useState(null);
 
@@ -43,41 +24,62 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // If you later add a cancel flow, keep this; for now we won’t define unused state.
-  // const [cancelingProjectId, setCancelingProjectId] = useState(null);
-
   useEffect(() => {
     let mounted = true;
 
     async function load() {
+      // Wait for AuthProvider to finish checking /me
+      if (authLoading) return;
+
+      // If no token, user isn't authenticated (ProtectedRoute should prevent this anyway)
+      if (!token) {
+        if (mounted) {
+          setProjects([]);
+          setLoading(false);
+        }
+        return;
+      }
+
       try {
         setLoading(true);
         setError("");
 
-        // Customer projects endpoint (should already be scoped to current user)
-        const data = await apiFetch("/api/v1/projects");
-        if (!mounted) return;
+        const res = await fetch(`${API_BASE}/api/v1/projects`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || `Request failed: ${res.status}`);
+        }
+
+        const data = await res.json();
 
         // normalize expected payload shapes: either {projects: []} or []
         const list = Array.isArray(data) ? data : data?.projects || [];
+
+        if (!mounted) return;
         setProjects(list);
       } catch (e) {
         if (!mounted) return;
         setError(e.message || "Failed to load projects.");
+        setProjects([]);
       } finally {
         if (mounted) setLoading(false);
       }
     }
 
     load();
+
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [authLoading, token]);
 
   const filteredAndSorted = useMemo(() => {
     const q = query.trim().toLowerCase();
-
     let list = [...projects];
 
     // filter: search
@@ -90,7 +92,9 @@ export default function Dashboard() {
 
     // filter: status
     if (statusFilter !== "all") {
-      list = list.filter((p) => (p.status || "").toLowerCase() === statusFilter);
+      list = list.filter(
+        (p) => (p.status || "").toLowerCase() === statusFilter
+      );
     }
 
     // sort + "completed to bottom" rule
@@ -141,12 +145,16 @@ export default function Dashboard() {
   }
 
   function handleOpenScheduleForProject(project) {
-    // If you already have a schedule route, link there instead.
-    // Example: navigate(`/schedule?projectId=${project.id}`)
-    alert(`Schedule install for: ${project.name || project.title || "Project"} (id: ${project.id})`);
+    // Later: navigate to your schedule flow with project pre-selected
+    alert(
+      `Schedule install for: ${project.name || project.title || "Project"} (id: ${
+        project.id
+      })`
+    );
   }
 
-  if (loading) {
+  // If AuthContext still loading, show loading
+  if (authLoading || loading) {
     return (
       <div style={{ padding: 24 }}>
         <h1>Dashboard</h1>
@@ -169,7 +177,14 @@ export default function Dashboard() {
       <h1>My Projects</h1>
 
       {/* Controls */}
-      <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 200px 220px", marginTop: 16 }}>
+      <div
+        style={{
+          display: "grid",
+          gap: 12,
+          gridTemplateColumns: "1fr 200px 220px",
+          marginTop: 16,
+        }}
+      >
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -237,7 +252,13 @@ export default function Dashboard() {
                     padding: 0,
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 12,
+                    }}
+                  >
                     <div>
                       <div style={{ fontWeight: 700 }}>{name}</div>
                       <div style={{ fontSize: 13, opacity: 0.75 }}>
@@ -252,15 +273,19 @@ export default function Dashboard() {
 
                 {isExpanded && (
                   <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-                    {/* Example “details” — adjust field names to match your API */}
                     <div style={{ fontSize: 14, opacity: 0.9 }}>
-                      <div><strong>Created:</strong> {p.created_at || "—"}</div>
-                      <div><strong>Install date:</strong> {p.install_date || "—"}</div>
-                      <div><strong>Notes:</strong> {p.notes || "—"}</div>
+                      <div>
+                        <strong>Created:</strong> {p.created_at || "—"}
+                      </div>
+                      <div>
+                        <strong>Install date:</strong> {p.install_date || "—"}
+                      </div>
+                      <div>
+                        <strong>Notes:</strong> {p.notes || "—"}
+                      </div>
                     </div>
 
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                      {/* Files link per project */}
                       <Link
                         to={`/projects/${p.id}/files`}
                         style={{
@@ -274,7 +299,6 @@ export default function Dashboard() {
                         View Files
                       </Link>
 
-                      {/* Schedule install only when ready_for_install */}
                       {canSchedule && (
                         <button
                           type="button"
