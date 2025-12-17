@@ -7,7 +7,6 @@ module Api
       # List projects for the current logged-in user
       def index
         projects = current_user.projects.order(created_at: :desc)
-
         render json: projects.map { |project| project_json(project) }, status: :ok
       end
 
@@ -29,7 +28,6 @@ module Api
         project = current_user.projects.find_by(id: params[:id])
         return render json: { error: "Project not found" }, status: :not_found unless project
 
-        # We only care about install_date & install_slot from the customer side
         new_date = project_params[:install_date]
         new_slot = project_params[:install_slot]
 
@@ -46,11 +44,22 @@ module Api
           }, status: :unprocessable_entity
         end
 
-        # Optional: here is where you could also enforce server-side rules
-        # (3–30 day window, weekdays only, not holidays) if you want
-        # to double-protect the logic.
-
         if project.update(project_params)
+          render json: project_json(project), status: :ok
+        else
+          render json: { error: project.errors.full_messages.to_sentence }, status: :unprocessable_entity
+        end
+      end
+
+      # POST /api/v1/projects/:id/cancel_install
+      def cancel_install
+        project = current_user.projects.find_by(id: params[:id])
+        return render json: { error: "Project not found" }, status: :not_found unless project
+
+        project.install_date = nil
+        project.install_slot = nil
+
+        if project.save
           render json: project_json(project), status: :ok
         else
           render json: { error: project.errors.full_messages.to_sentence }, status: :unprocessable_entity

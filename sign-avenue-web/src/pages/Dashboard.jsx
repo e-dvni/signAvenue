@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useContext } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext";
 
 const API_BASE = "http://localhost:3000";
@@ -11,7 +11,21 @@ const STATUS_LABELS = {
   completed: "Completed",
 };
 
+function hasScheduledInstall(project) {
+  // In your app, schedule is stored on Project: install_date + install_slot
+  return Boolean(project?.install_date && project?.install_slot);
+}
+
+function scheduledLabel(project) {
+  if (!hasScheduledInstall(project)) return "";
+  const date = project.install_date;
+  const slot = project.install_slot;
+  const slotLabel = slot === "am" ? "AM" : slot === "pm" ? "PM" : slot;
+  return `${date} (${slotLabel})`;
+}
+
 export default function Dashboard() {
+  const navigate = useNavigate();
   const { token, loading: authLoading } = useContext(AuthContext);
 
   const [projects, setProjects] = useState([]);
@@ -24,14 +38,26 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  async function fetchProjects() {
+    const res = await fetch(`${API_BASE}/api/v1/projects`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || `Request failed: ${res.status}`);
+    }
+
+    const data = await res.json();
+    return Array.isArray(data) ? data : data?.projects || [];
+  }
+
   useEffect(() => {
     let mounted = true;
 
     async function load() {
-      // Wait for AuthProvider to finish checking /me
       if (authLoading) return;
 
-      // If no token, user isn't authenticated (ProtectedRoute should prevent this anyway)
       if (!token) {
         if (mounted) {
           setProjects([]);
@@ -44,23 +70,9 @@ export default function Dashboard() {
         setLoading(true);
         setError("");
 
-        const res = await fetch(`${API_BASE}/api/v1/projects`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (!res.ok) {
-          const text = await res.text();
-          throw new Error(text || `Request failed: ${res.status}`);
-        }
-
-        const data = await res.json();
-
-        // normalize expected payload shapes: either {projects: []} or []
-        const list = Array.isArray(data) ? data : data?.projects || [];
-
+        const list = await fetchProjects();
         if (!mounted) return;
+
         setProjects(list);
       } catch (e) {
         if (!mounted) return;
@@ -72,7 +84,6 @@ export default function Dashboard() {
     }
 
     load();
-
     return () => {
       mounted = false;
     };
@@ -82,7 +93,6 @@ export default function Dashboard() {
     const q = query.trim().toLowerCase();
     let list = [...projects];
 
-    // filter: search
     if (q) {
       list = list.filter((p) => {
         const name = (p.name || p.title || "").toLowerCase();
@@ -90,18 +100,16 @@ export default function Dashboard() {
       });
     }
 
-    // filter: status
     if (statusFilter !== "all") {
       list = list.filter(
         (p) => (p.status || "").toLowerCase() === statusFilter
       );
     }
 
-    // sort + "completed to bottom" rule
     const isCompleted = (p) => (p.status || "").toLowerCase() === "completed";
 
     const compare = (a, b) => {
-      // Always push completed to bottom
+      // completed always at bottom
       const ac = isCompleted(a);
       const bc = isCompleted(b);
       if (ac !== bc) return ac ? 1 : -1;
@@ -112,8 +120,8 @@ export default function Dashboard() {
       const aCreated = new Date(a.created_at || 0).getTime();
       const bCreated = new Date(b.created_at || 0).getTime();
 
-      const aInstall = new Date(a.install_date || a.installAt || 0).getTime();
-      const bInstall = new Date(b.install_date || b.installAt || 0).getTime();
+      const aInstall = new Date(a.install_date || 0).getTime();
+      const bInstall = new Date(b.install_date || 0).getTime();
 
       switch (sortBy) {
         case "name_asc":
@@ -145,15 +153,44 @@ export default function Dashboard() {
   }
 
   function handleOpenScheduleForProject(project) {
-    // Later: navigate to your schedule flow with project pre-selected
-    alert(
-      `Schedule install for: ${project.name || project.title || "Project"} (id: ${
-        project.id
-      })`
-    );
+    navigate(`/my-schedule?projectId=${project.id}`);
   }
 
-  // If AuthContext still loading, show loading
+  async function handleCancelInstall(project) {
+    if (!token) return;
+
+    const ok = window.confirm(
+      `Cancel installation for "${project.name || project.title || "Project"}"?`
+    );
+    if (!ok) return;
+
+    try {
+      // You need this endpoint in Rails:
+      // POST /api/v1/projects/:id/cancel_install
+      const res = await fetch(
+        `${API_BASE}/api/v1/projects/${project.id}/cancel_install`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Cancel failed: ${res.status}`);
+      }
+
+      // Refresh list
+      setLoading(true);
+      const list = await fetchProjects();
+      setProjects(list);
+    } catch (e) {
+      alert(e.message || "Failed to cancel installation.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   if (authLoading || loading) {
     return (
       <div style={{ padding: 24 }}>
@@ -229,7 +266,9 @@ export default function Dashboard() {
             const name = p.name || p.title || `Project #${p.id}`;
             const status = (p.status || "unknown").toLowerCase();
             const isExpanded = expandedId === p.id;
-            const canSchedule = status === "ready_for_install";
+
+            const readyForInstall = status === "ready_for_install";
+            const alreadyScheduled = hasScheduledInstall(p);
 
             return (
               <div
@@ -265,8 +304,9 @@ export default function Dashboard() {
                         Status: {STATUS_LABELS[status] || status}
                       </div>
                     </div>
+
                     <div style={{ fontSize: 13, opacity: 0.7 }}>
-                      {p.install_date ? `Install: ${p.install_date}` : ""}
+                      {alreadyScheduled ? `Install: ${scheduledLabel(p)}` : ""}
                     </div>
                   </div>
                 </button>
@@ -278,7 +318,8 @@ export default function Dashboard() {
                         <strong>Created:</strong> {p.created_at || "—"}
                       </div>
                       <div>
-                        <strong>Install date:</strong> {p.install_date || "—"}
+                        <strong>Install date:</strong>{" "}
+                        {alreadyScheduled ? scheduledLabel(p) : "—"}
                       </div>
                       <div>
                         <strong>Notes:</strong> {p.notes || "—"}
@@ -299,7 +340,7 @@ export default function Dashboard() {
                         View Files
                       </Link>
 
-                      {canSchedule && (
+                      {readyForInstall && !alreadyScheduled && (
                         <button
                           type="button"
                           onClick={() => handleOpenScheduleForProject(p)}
@@ -312,6 +353,22 @@ export default function Dashboard() {
                           }}
                         >
                           Schedule Installation
+                        </button>
+                      )}
+
+                      {readyForInstall && alreadyScheduled && (
+                        <button
+                          type="button"
+                          onClick={() => handleCancelInstall(p)}
+                          style={{
+                            padding: "8px 12px",
+                            borderRadius: 10,
+                            border: "1px solid #ccc",
+                            background: "white",
+                            cursor: "pointer",
+                          }}
+                        >
+                          Cancel Installation
                         </button>
                       )}
                     </div>

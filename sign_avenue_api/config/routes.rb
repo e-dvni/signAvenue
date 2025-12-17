@@ -16,6 +16,9 @@ Rails.application.routes.draw do
       # Customer projects
       resources :projects, only: [:index, :show, :update] do
         resources :files, controller: "project_files", only: [:index, :show]
+
+        # Cancel a scheduled install
+        post :cancel_install, on: :member
       end
 
       # Customer schedule view (read-only availability)
