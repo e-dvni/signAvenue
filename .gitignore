@@ -1,0 +1,23 @@
+# --- Rails ---
+api/log/*
+api/tmp/*
+api/storage/*
+api/.bundle
+api/vendor/bundle
+api/*.sqlite3
+api/config/master.key
+
+# --- Node / Frontend ---
+web/node_modules
+web/.next
+web/dist
+web/build
+
+# --- Env files ---
+.env
+.env.*
+api/.env
+web/.env
+
+# --- OS ---
+.DS_Store
