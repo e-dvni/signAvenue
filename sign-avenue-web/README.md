@@ -1,16 +1,7 @@
-# React + Vite
+# Sign Avenue LLC Project
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The goal of this project is to create a website for Sign Avenue with the assistance of AI.
 
-Currently, two official plugins are available:
+I will be making a simple website with Home, Portfolio, Services, About, and Contact.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+I will also create a user dashboard to track ongoing projects and assign installation.  On the other side of that, I will create an admin dashboard where admins can see all projects, contact requests, scheduling board, and control all files and details of customer projects.  Admins will also have a built in Accounting section where they can keep track of customer payments and balances, as well as create invoice pdfs to send to users.
