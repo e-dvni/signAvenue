@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
 const Login = () => {
@@ -36,16 +36,23 @@ const Login = () => {
         }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (res.ok) {
+        // normal login success
         login(data.user, data.token);
         navigate("/dashboard");
-      } else {
-        setError(data.error || "Invalid email or password");
+        return;
       }
+
+      // If backend says email not confirmed, send them to verify page
+      if (data?.needs_verification) {
+        navigate(`/verify-email?email=${encodeURIComponent(data.email || form.email)}`);
+        return;
+      }
+
+      setError(data.error || "Invalid email or password");
     } catch {
-      // no variable → no ESLint "unused variable" error
       setError("Unable to reach server. Try again later.");
     } finally {
       setLoading(false);
@@ -55,6 +62,10 @@ const Login = () => {
   return (
     <section>
       <h1>Customer Login</h1>
+
+      <p style={{ opacity: 0.85 }}>
+        Don&apos;t have an account? <Link to="/signup">Sign up</Link>
+      </p>
 
       {error && <p style={{ color: "red" }}>{error}</p>}
 
