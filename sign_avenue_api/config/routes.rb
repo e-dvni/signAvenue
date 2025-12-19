@@ -30,6 +30,10 @@ Rails.application.routes.draw do
       namespace :admin do
         resources :contact_requests, only: [:index, :show, :update]
 
+        resources :users, only: [:index, :show] do
+          resources :projects, only: [:create], controller: "user_projects"
+        end
+
         resources :projects, only: [:index, :show, :update] do
           resources :files, controller: "project_files", only: [:index, :show, :create, :destroy]
         end

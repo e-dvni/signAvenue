@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 const API_BASE = "http://localhost:3000";
@@ -20,16 +20,27 @@ export default function VerifyEmail() {
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
 
+  // If someone lands here without an email in the query, send them to signup
+  useEffect(() => {
+    const qEmail = query.get("email");
+    if (qEmail && !email) setEmail(qEmail);
+
+    if (!qEmail && !email) {
+      navigate("/signup");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const cleanEmail = email.trim();
+  const canVerify = code.length === 6 && /^\d{6}$/.test(code);
+
   async function handleVerify(e) {
     e.preventDefault();
     setError("");
     setInfo("");
 
-    const cleanEmail = email.trim();
-    const cleanCode = code.trim();
-
     if (!cleanEmail) return setError("Email is required.");
-    if (cleanCode.length !== 6) return setError("Enter the 6-digit code.");
+    if (!canVerify) return setError("Enter the 6-digit code.");
 
     try {
       setLoading(true);
@@ -37,12 +48,19 @@ export default function VerifyEmail() {
       const res = await fetch(`${API_BASE}/api/v1/users/verify-email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: cleanEmail, code: cleanCode }),
+        body: JSON.stringify({ email: cleanEmail, code }),
       });
 
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
+        // If already confirmed, treat as success UX-wise
+        if (data?.message?.toLowerCase().includes("already confirmed")) {
+          setInfo("Email already confirmed. Redirecting to login…");
+          setTimeout(() => navigate("/login"), 600);
+          return;
+        }
+
         throw new Error(data?.error || "Verification failed.");
       }
 
@@ -59,7 +77,6 @@ export default function VerifyEmail() {
     setError("");
     setInfo("");
 
-    const cleanEmail = email.trim();
     if (!cleanEmail) return setError("Email is required.");
 
     try {
@@ -74,6 +91,9 @@ export default function VerifyEmail() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
+        if (res.status === 429) {
+          throw new Error(data?.error || "Too many codes sent. Please wait and try again.");
+        }
         throw new Error(data?.error || "Could not resend code.");
       }
 
@@ -88,12 +108,13 @@ export default function VerifyEmail() {
   return (
     <div style={{ maxWidth: 520, margin: "0 auto", padding: 24 }}>
       <h1>Verify your email</h1>
-      <p style={{ opacity: 0.8 }}>
+
+      <p style={{ opacity: 0.85 }}>
         Enter the 6-digit code we sent to your email.
       </p>
 
-      <p style={{ opacity: 0.8 }}>
-        Back to <Link to="/login">Log in</Link>
+      <p style={{ opacity: 0.85 }}>
+        Back to <Link to="/login">Log in</Link> • Need an account? <Link to="/signup">Sign up</Link>
       </p>
 
       {error && (
@@ -120,7 +141,7 @@ export default function VerifyEmail() {
             style={{ padding: 10, borderRadius: 8, border: "1px solid #ccc" }}
           />
           <span style={{ fontSize: 12, opacity: 0.7 }}>
-            If you typed the wrong email, change it here and resend the code.
+            Wrong email? Change it here, then click “Resend code”.
           </span>
         </label>
 
@@ -128,7 +149,7 @@ export default function VerifyEmail() {
           <span>Confirmation code</span>
           <input
             value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
             type="text"
             inputMode="numeric"
             maxLength={6}
@@ -136,20 +157,21 @@ export default function VerifyEmail() {
             style={{ padding: 10, borderRadius: 8, border: "1px solid #ccc", letterSpacing: 3 }}
           />
           <span style={{ fontSize: 12, opacity: 0.7 }}>
-            Tip: codes can start with 0. Keep it as text.
+            Tip: codes can start with 0 — keep it as text.
           </span>
         </label>
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || !canVerify}
           style={{
             padding: "10px 12px",
             borderRadius: 10,
             border: "1px solid #222",
             background: "#222",
             color: "white",
-            cursor: loading ? "not-allowed" : "pointer",
+            cursor: loading || !canVerify ? "not-allowed" : "pointer",
+            opacity: loading || !canVerify ? 0.7 : 1,
           }}
         >
           {loading ? "Verifying..." : "Verify email"}
@@ -165,6 +187,7 @@ export default function VerifyEmail() {
             border: "1px solid #ccc",
             background: "white",
             cursor: resending ? "not-allowed" : "pointer",
+            opacity: resending ? 0.7 : 1,
           }}
         >
           {resending ? "Resending..." : "Resend code"}

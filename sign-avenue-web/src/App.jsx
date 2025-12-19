@@ -24,6 +24,8 @@ import AdminContactRequests from "./pages/AdminContactRequests";
 import AdminProjects from "./pages/AdminProjects";
 import AdminProjectFiles from "./pages/AdminProjectFiles";
 import AdminSchedule from "./pages/AdminSchedule";
+import AdminUsers from "./pages/AdminUsers";
+import AdminUserDetail from "./pages/AdminUserDetail";
 
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -139,6 +141,24 @@ function App() {
           element={
             <ProtectedRoute>
               <AdminSchedule />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="admin/users"
+          element={
+            <ProtectedRoute>
+              <AdminUsers />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="admin/users/:id"
+          element={
+            <ProtectedRoute>
+              <AdminUserDetail />
             </ProtectedRoute>
           }
         />

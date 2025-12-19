@@ -39,7 +39,7 @@ export default function Signup() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user: {
-            email: email.trim(),
+            email: email.trim().toLowerCase(),
             first_name: firstName.trim(),
             last_name: lastName.trim(),
             password,
@@ -51,6 +51,11 @@ export default function Signup() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
+        // Helpful message for rate limit
+        if (res.status === 439) {
+          throw new Error(data?.error || "Too many confirmation codes sent.  Please wait and try again.");
+        }
+
         const msg =
           data?.error ||
           (Array.isArray(data?.errors) ? data.errors.join(", ") : null) ||
@@ -60,7 +65,7 @@ export default function Signup() {
 
       // Backend returns: { needs_verification: true, email: "..." }
       if (data?.needs_verification) {
-        navigate(`/verify-email?email=${encodeURIComponent(data.email || email.trim())}`);
+        navigate(`/verify-email?email=${encodeURIComponent(data.email || email.trim().toLowerCase())}`);
         return;
       }
 
