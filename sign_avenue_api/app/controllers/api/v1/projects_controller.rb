@@ -4,14 +4,12 @@ module Api
       before_action :authenticate_user!
 
       # GET /api/v1/projects
-      # List projects for the current logged-in user
       def index
         projects = current_user.projects.order(created_at: :desc)
         render json: projects.map { |project| project_json(project) }, status: :ok
       end
 
       # GET /api/v1/projects/:id
-      # Show a single project (only if it belongs to current_user)
       def show
         project = current_user.projects.find_by(id: params[:id])
 
@@ -33,6 +31,13 @@ module Api
 
         # Is this a cancellation? (clear both)
         is_cancellation = new_date.blank? && new_slot.blank?
+
+        # ✅ Enforce: customers can only schedule when status is "installation"
+        unless project.status == "installation" || is_cancellation
+          return render json: {
+            error: "You can only schedule installation when the project status is Installation."
+          }, status: :unprocessable_entity
+        end
 
         # If project already has a booking AND this is NOT a cancellation,
         # block direct rescheduling – they must cancel first.
@@ -82,7 +87,7 @@ module Api
           install_date: project.install_date,
           install_slot: project.install_slot,
           description: project.description,
-          can_schedule: project.status == "ready_for_install",
+          can_schedule: project.status == "installation",
           created_at: project.created_at,
           updated_at: project.updated_at
         }

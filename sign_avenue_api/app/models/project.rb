@@ -1,29 +1,24 @@
 class Project < ApplicationRecord
   belongs_to :user
-
-  # Project-related uploads (drawings, proofs, photos, invoices, etc.)
   has_many_attached :files
 
-  # You can tweak these later if you want more/less states
   STATUSES = %w[
     draft
-    quote_sent
-    in_production
-    ready_for_install
-    scheduled
-    installed
-    completed
+    acquiring_permits
+    production
+    installation
+    complete
     cancelled
   ].freeze
 
   validates :name, presence: true
   validates :status, inclusion: { in: STATUSES }, allow_nil: true
 
-  # Only two valid customer-facing install slots
+  # keep if you still use install_slot somewhere
   validates :install_slot, inclusion: { in: %w[am pm] }, allow_nil: true
 
-  # Helper: is this project allowed to be scheduled by the customer?
+  # ✅ customers can schedule only in Installation stage
   def installable?
-    status == "ready_for_install"
+    status == "installation"
   end
 end

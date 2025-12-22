@@ -1,11 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import AdminLayout from "../components/AdminLayout";
 
+const API_BASE = "http://localhost:3000/api/v1";
+
 const AdminDashboard = () => {
   const { user, token } = useAuth();
+
   const [contactRequests, setContactRequests] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [users, setUsers] = useState([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -17,32 +23,32 @@ const AdminDashboard = () => {
       }
 
       try {
-        const [reqRes, projRes] = await Promise.all([
-          fetch("http://localhost:3000/api/v1/admin/contact_requests", {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
+        setLoading(true);
+        setError(null);
+
+        const [reqRes, projRes, usersRes] = await Promise.all([
+          fetch(`${API_BASE}/admin/contact_requests`, {
+            headers: { Authorization: `Bearer ${token}` },
           }),
-          fetch("http://localhost:3000/api/v1/admin/projects", {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
+          fetch(`${API_BASE}/admin/projects`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(`${API_BASE}/admin/users`, {
+            headers: { Authorization: `Bearer ${token}` },
           }),
         ]);
 
-        const reqData = await reqRes.json();
-        const projData = await projRes.json();
+        const reqData = await reqRes.json().catch(() => ([]));
+        const projData = await projRes.json().catch(() => ([]));
+        const usersData = await usersRes.json().catch(() => ([]));
 
-        if (!reqRes.ok) {
-          throw new Error(reqData.error || "Failed to load contact requests");
-        }
+        if (!reqRes.ok) throw new Error(reqData?.error || "Failed to load contact requests");
+        if (!projRes.ok) throw new Error(projData?.error || "Failed to load projects");
+        if (!usersRes.ok) throw new Error(usersData?.error || "Failed to load users");
 
-        if (!projRes.ok) {
-          throw new Error(projData.error || "Failed to load projects");
-        }
-
-        setContactRequests(reqData);
-        setProjects(projData);
+        setContactRequests(Array.isArray(reqData) ? reqData : reqData?.contact_requests || []);
+        setProjects(Array.isArray(projData) ? projData : projData?.projects || []);
+        setUsers(Array.isArray(usersData) ? usersData : usersData?.users || []);
       } catch (err) {
         console.error(err);
         setError("Unable to load admin data.");
@@ -58,6 +64,26 @@ const AdminDashboard = () => {
       setError("You are not authorized to view this page.");
     }
   }, [token, user]);
+
+  // --- Counts (frontend fallback) ---
+  const unopenedContactCount = useMemo(() => {
+    // Your ContactRequest model has `status`.
+    // We'll treat these as "unopened": nil, "", "new", "unopened"
+    return contactRequests.filter((cr) => {
+      const s = (cr?.status || "").toString().toLowerCase();
+      return s === "" || s === "new" || s === "unopened" || s === "open";
+    }).length;
+  }, [contactRequests]);
+
+  const ongoingProjectsCount = useMemo(() => {
+    // Ongoing = anything not completed
+    return projects.filter((p) => (p?.status || "").toString().toLowerCase() !== "completed").length;
+  }, [projects]);
+
+  const usersCount = users.length;
+
+  // Placeholder until invoices exist
+  const accountsReceivableDisplay = "$0";
 
   if (loading) {
     return (
@@ -78,117 +104,50 @@ const AdminDashboard = () => {
   return (
     <AdminLayout
       title="Admin Dashboard"
-      subtitle="Overview of contact requests and active projects."
+      subtitle="Quick overview of Sign Avenue operations."
     >
-      {/* Top summary cards */}
+      {/* Summary cards ONLY */}
       <div className="admin-summary-grid">
-        <div className="admin-card">
+        <Link
+          to="/admin/contact-requests"
+          className="admin-card"
+          style={{ textDecoration: "none", color: "inherit" }}
+        >
           <p className="admin-card-label">Contact Requests</p>
-          <p className="admin-card-value">{contactRequests.length}</p>
-          <p className="admin-card-hint">
-            New leads from the website contact form.
-          </p>
-        </div>
-        <div className="admin-card">
-          <p className="admin-card-label">Projects</p>
-          <p className="admin-card-value">{projects.length}</p>
-          <p className="admin-card-hint">
-            Active or past sign jobs in the system.
-          </p>
-        </div>
-      </div>
+          <p className="admin-card-value">{unopenedContactCount}</p>
+          <p className="admin-card-hint">Unopened requests that need attention.</p>
+        </Link>
 
-      {/* Two-column layout: requests + projects */}
-      <div className="admin-grid">
-        {/* Contact Requests */}
-        <section className="admin-section">
-          <div className="admin-section-header">
-            <h2 className="admin-section-title">Recent Contact Requests</h2>
-          </div>
+        <Link
+          to="/admin/projects"
+          className="admin-card"
+          style={{ textDecoration: "none", color: "inherit" }}
+        >
+          <p className="admin-card-label">Ongoing Projects</p>
+          <p className="admin-card-value">{ongoingProjectsCount}</p>
+          <p className="admin-card-hint">Projects not marked completed.</p>
+        </Link>
 
-          {contactRequests.length === 0 ? (
-            <p className="admin-empty-state">No contact requests yet.</p>
-          ) : (
-            <ul className="admin-list">
-              {contactRequests.slice(0, 3).map((cr) => (
-                <li key={cr.id} className="admin-list-item">
-                  <div className="admin-list-item-main">
-                    <p className="admin-list-item-title">
-                      {cr.name}{" "}
-                      {cr.city && (
-                        <span className="admin-list-item-tag">{cr.city}</span>
-                      )}
-                    </p>
+        <Link
+          to="/admin/users"
+          className="admin-card"
+          style={{ textDecoration: "none", color: "inherit" }}
+        >
+          <p className="admin-card-label">Users</p>
+          <p className="admin-card-value">{usersCount}</p>
+          <p className="admin-card-hint">Customers in your system.</p>
+        </Link>
 
-                    <p className="admin-list-item-subtitle">
-                      {cr.email} {cr.phone && `• ${cr.phone}`}
-                    </p>
-
-                    {cr.message && (
-                      <p className="admin-list-item-body">{cr.message}</p>
-                    )}
-
-                    {/* ✅ Step 3b: show attachment link if present */}
-                    {cr.file_url && (
-                      <p className="admin-list-item-body">
-                        <a
-                          href={cr.file_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="admin-file-link"
-                        >
-                          📎 View Attachment
-                        </a>
-                      </p>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        {/* Projects */}
-        <section className="admin-section">
-          <div className="admin-section-header">
-            <h2 className="admin-section-title">Projects</h2>
-            <span className="admin-section-badge">{projects.length}</span>
-          </div>
-
-          {projects.length === 0 ? (
-            <p className="admin-empty-state">No projects yet.</p>
-          ) : (
-            <ul className="admin-list">
-              {projects.slice(0, 5).map((p) => (
-                <li key={p.id} className="admin-list-item">
-                  <div className="admin-list-item-main">
-                    <p className="admin-list-item-title">
-                      {p.name}
-                      {p.status && (
-                        <span className="admin-status-badge">{p.status}</span>
-                      )}
-                    </p>
-                    <p className="admin-list-item-subtitle">
-                      {p.user
-                        ? `${p.user.name} (${p.user.email})`
-                        : "Unassigned"}
-                    </p>
-                    {p.location && (
-                      <p className="admin-list-item-body">
-                        Location: {p.location}
-                      </p>
-                    )}
-                    {p.install_date && (
-                      <p className="admin-list-item-body">
-                        Install date: {p.install_date}
-                      </p>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        {/* Placeholder link until we build billing */}
+        <Link
+          to="/admin"
+          className="admin-card"
+          style={{ textDecoration: "none", color: "inherit" }}
+        >
+          <p className="admin-card-label">Accounts Receivable</p>
+          <p className="admin-card-value">{accountsReceivableDisplay}</p>
+          <p className="admin-card-hint">Unpaid invoices (coming soon).</p>
+        </Link>
       </div>
     </AdminLayout>
   );

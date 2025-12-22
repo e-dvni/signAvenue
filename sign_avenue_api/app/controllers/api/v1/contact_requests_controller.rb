@@ -21,8 +21,7 @@ module Api
           :phone,
           :business_name,
           :city,
-          :service_id,
-          :message
+          :message,
           :file
         )
       end

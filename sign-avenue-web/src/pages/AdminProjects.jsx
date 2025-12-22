@@ -2,17 +2,17 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import AdminLayout from "../components/AdminLayout";
+import { PROJECT_STATUSES, statusLabel } from "../utils/projectStatus";
 
-// Safely format "YYYY-MM-DD" + slot into a nice label
 const formatInstallLabel = (install_date, install_slot) => {
   if (!install_date) return "Not scheduled";
 
   const parts = install_date.split("-");
-  if (parts.length !== 3) return install_date; // fallback
+  if (parts.length !== 3) return install_date;
 
   const [yearStr, monthStr, dayStr] = parts;
   const year = Number(yearStr);
-  const monthIndex = Number(monthStr) - 1; // 0-based
+  const monthIndex = Number(monthStr) - 1;
   const day = Number(dayStr);
 
   const date = new Date(year, monthIndex, day);
@@ -28,19 +28,9 @@ const formatInstallLabel = (install_date, install_slot) => {
   return slotLabel ? `${dateLabel} (${slotLabel})` : dateLabel;
 };
 
-const STATUSES = [
-  "draft",
-  "quote_sent",
-  "in_production",
-  "ready_for_install",
-  "scheduled",
-  "installed",
-  "completed",
-  "cancelled",
-];
-
-const AdminProjects = () => {
+export default function AdminProjects() {
   const { token, user } = useAuth();
+
   const [projects, setProjects] = useState([]);
   const [expandedId, setExpandedId] = useState(null);
 
@@ -70,8 +60,8 @@ const AdminProjects = () => {
           headers: { Authorization: `Bearer ${token}` },
         });
 
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Unable to load projects.");
+        const data = await res.json().catch(() => []);
+        if (!res.ok) throw new Error(data?.error || "Unable to load projects.");
 
         setProjects(Array.isArray(data) ? data : []);
       } catch (err) {
@@ -115,9 +105,11 @@ const AdminProjects = () => {
         }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.errors?.join(", ") || data.error || "Update failed");
+        throw new Error(
+          data.errors?.join(", ") || data.error || "Update failed"
+        );
       }
 
       setProjects((prev) => prev.map((p) => (p.id === data.id ? data : p)));
@@ -136,6 +128,7 @@ const AdminProjects = () => {
     if (q) {
       list = list.filter((p) => (p.name || "").toLowerCase().includes(q));
     }
+
     if (statusFilter) {
       list = list.filter((p) => p.status === statusFilter);
     }
@@ -143,11 +136,11 @@ const AdminProjects = () => {
     const dir = sortDir === "asc" ? 1 : -1;
 
     list.sort((a, b) => {
-      // Put completed at the bottom (regardless of sort)
-      const aCompleted = a.status === "completed";
-      const bCompleted = b.status === "completed";
-      if (aCompleted && !bCompleted) return 1;
-      if (!aCompleted && bCompleted) return -1;
+      // Put "complete" at the bottom regardless of sort
+      const aComplete = a.status === "complete";
+      const bComplete = b.status === "complete";
+      if (aComplete && !bComplete) return 1;
+      if (!aComplete && bComplete) return -1;
 
       if (sortKey === "install_date") {
         const ad = a.install_date ? new Date(a.install_date).getTime() : 0;
@@ -173,7 +166,10 @@ const AdminProjects = () => {
 
   if (loading) {
     return (
-      <AdminLayout title="Projects" subtitle="All customer sign projects managed by Sign Avenue.">
+      <AdminLayout
+        title="Projects"
+        subtitle="All customer sign projects managed by Sign Avenue."
+      >
         <section className="admin-section">
           <p className="admin-empty-state">Loading projects...</p>
         </section>
@@ -183,7 +179,10 @@ const AdminProjects = () => {
 
   if (error) {
     return (
-      <AdminLayout title="Projects" subtitle="All customer sign projects managed by Sign Avenue.">
+      <AdminLayout
+        title="Projects"
+        subtitle="All customer sign projects managed by Sign Avenue."
+      >
         <section className="admin-section">
           <p className="admin-empty-state">{error}</p>
         </section>
@@ -193,9 +192,14 @@ const AdminProjects = () => {
 
   if (!user || !token) {
     return (
-      <AdminLayout title="Projects" subtitle="All customer sign projects managed by Sign Avenue.">
+      <AdminLayout
+        title="Projects"
+        subtitle="All customer sign projects managed by Sign Avenue."
+      >
         <section className="admin-section">
-          <p className="admin-empty-state">You must be logged in to view this page.</p>
+          <p className="admin-empty-state">
+            You must be logged in to view this page.
+          </p>
         </section>
       </AdminLayout>
     );
@@ -214,30 +218,53 @@ const AdminProjects = () => {
           <span className="admin-section-badge">{visibleProjects.length}</span>
         </div>
 
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 12, alignItems: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 12,
+            marginTop: 12,
+            alignItems: "center",
+          }}
+        >
           <input
             type="text"
             placeholder="Search by project name..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={{ padding: "0.6rem 0.8rem", borderRadius: 10, border: "1px solid #e5e7eb", minWidth: 260 }}
+            style={{
+              padding: "0.6rem 0.8rem",
+              borderRadius: 10,
+              border: "1px solid #e5e7eb",
+              minWidth: 260,
+            }}
           />
 
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            style={{ padding: "0.6rem 0.8rem", borderRadius: 10, border: "1px solid #e5e7eb" }}
+            style={{
+              padding: "0.6rem 0.8rem",
+              borderRadius: 10,
+              border: "1px solid #e5e7eb",
+            }}
           >
             <option value="">All statuses</option>
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>{s}</option>
+            {PROJECT_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {statusLabel(s)}
+              </option>
             ))}
           </select>
 
           <select
             value={sortKey}
             onChange={(e) => setSortKey(e.target.value)}
-            style={{ padding: "0.6rem 0.8rem", borderRadius: 10, border: "1px solid #e5e7eb" }}
+            style={{
+              padding: "0.6rem 0.8rem",
+              borderRadius: 10,
+              border: "1px solid #e5e7eb",
+            }}
           >
             <option value="name">Sort: Name</option>
             <option value="status">Sort: Status</option>
@@ -265,10 +292,19 @@ const AdminProjects = () => {
 
               return (
                 <li key={p.id} className="admin-list-item">
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      alignItems: "flex-start",
+                    }}
+                  >
                     <button
                       type="button"
-                      onClick={() => setExpandedId((cur) => (cur === p.id ? null : p.id))}
+                      onClick={() =>
+                        setExpandedId((cur) => (cur === p.id ? null : p.id))
+                      }
                       style={{
                         flex: 1,
                         textAlign: "left",
@@ -280,15 +316,22 @@ const AdminProjects = () => {
                     >
                       <p className="admin-list-item-title">
                         {p.name || `Project #${p.id}`}
-                        {p.status && <span className="admin-status-badge">{p.status}</span>}
+                        {p.status && (
+                          <span className="admin-status-badge">
+                            {statusLabel(p.status)}
+                          </span>
+                        )}
                       </p>
 
                       <p className="admin-list-item-subtitle">
-                        {p.user ? `${p.user.name} (${p.user.email})` : "Unassigned"}
+                        {p.user
+                          ? `${p.user.name} (${p.user.email})`
+                          : "Unassigned"}
                       </p>
 
                       <p className="admin-list-item-body">
-                        Install: {formatInstallLabel(p.install_date, p.install_slot)}
+                        Install:{" "}
+                        {formatInstallLabel(p.install_date, p.install_slot)}
                       </p>
 
                       {p.location && (
@@ -298,16 +341,40 @@ const AdminProjects = () => {
                       )}
                     </button>
 
-                    <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                      <label style={{ fontSize: "0.85rem", display: "inline-flex", flexDirection: "column", gap: "0.25rem" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 10,
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <label
+                        style={{
+                          fontSize: "0.85rem",
+                          display: "inline-flex",
+                          flexDirection: "column",
+                          gap: "0.25rem",
+                        }}
+                      >
                         Status
                         <select
                           value={p.status || ""}
-                          onChange={(e) => handleFieldChange(p.id, { status: e.target.value })}
-                          style={{ fontSize: "0.85rem", padding: "0.35rem 0.5rem", borderRadius: 8 }}
+                          onChange={(e) =>
+                            handleFieldChange(p.id, {
+                              status: e.target.value,
+                            })
+                          }
+                          style={{
+                            fontSize: "0.85rem",
+                            padding: "0.35rem 0.5rem",
+                            borderRadius: 8,
+                          }}
                         >
-                          {STATUSES.map((s) => (
-                            <option key={s} value={s}>{s}</option>
+                          {PROJECT_STATUSES.map((s) => (
+                            <option key={s} value={s}>
+                              {statusLabel(s)}
+                            </option>
                           ))}
                         </select>
                       </label>
@@ -325,7 +392,13 @@ const AdminProjects = () => {
                   </div>
 
                   {isExpanded && (
-                    <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #e5e7eb" }}>
+                    <div
+                      style={{
+                        marginTop: 12,
+                        paddingTop: 12,
+                        borderTop: "1px solid #e5e7eb",
+                      }}
+                    >
                       {p.description && (
                         <p className="admin-list-item-body" style={{ marginTop: 6 }}>
                           <strong>Description:</strong> {p.description}
@@ -333,7 +406,10 @@ const AdminProjects = () => {
                       )}
 
                       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
-                        <Link className="btn btn-secondary" to={`/admin/projects/${p.id}/files`}>
+                        <Link
+                          className="btn btn-secondary"
+                          to={`/admin/projects/${p.id}/files`}
+                        >
                           Manage Files
                         </Link>
 
@@ -355,6 +431,4 @@ const AdminProjects = () => {
       </section>
     </AdminLayout>
   );
-};
-
-export default AdminProjects;
+}

@@ -25,7 +25,7 @@ const Home = () => {
             <p className="section-eyebrow">WHAT WE DO</p>
             <h2 className="page-section-title">Custom Sign Solutions</h2>
             <p className="page-section-lead">
-          Whether you need one statement piece or a full building package,
+          Whether you're a business, home-owner, or just looking to decorate,
           we handle design, fabrication, installation and support.
             </p>
           </header>

@@ -5,9 +5,10 @@ const AdminLayout = ({ title, subtitle, children }) => {
   const { user } = useAuth();
   const location = useLocation();
 
-  const isActive = (path) => {
-    return location.pathname === path;
-  };
+  const isActive = (path) => location.pathname === path;
+
+  // ✅ New: highlights Users for /admin/users AND /admin/users/:id
+  const isUsersActive = () => location.pathname.startsWith("/admin/users");
 
   return (
     <section className="admin-page">
@@ -22,48 +23,62 @@ const AdminLayout = ({ title, subtitle, children }) => {
           <nav className="admin-nav">
             <p className="admin-nav-section-label">Admin</p>
             <ul className="admin-nav-list">
-                <li
-                    className={
-                        "admin-nav-item" +
-                        (isActive("/admin") ? " admin-nav-item--active" : "")
-                    }
-                >
-                    <Link to="/admin" className="admin-nav-link">
-                        Dashboard
-                    </Link>
-                </li>
-                <li
-                    className={
-                        "admin-nav-item" +
-                        (isActive("/admin/contact-requests")
-                        ? " admin-nav-item--active"
-                        : "")
-                    }
-                >
-                    <Link to="/admin/contact-requests" className="admin-nav-link">
-                        Contact Requests
-                    </Link>
-                </li>
-                <li
-                    className={
-                        "admin-nav-item" +
-                        (isActive("/admin/projects") ? " admin-nav-item--active" : "")
-                    }
-                >
-                    <Link to="/admin/projects" className="admin-nav-link">
-                        Projects
-                    </Link>
-                </li>
-                <li
-                    className={
-                        "admin-nav-item" +
-                        (isActive("/admin/schedule") ? " admin-nav-item--active" : "")
-                    }
-                >
-                    <Link to="/admin/schedule" className="admin-nav-link">
-                        Schedule
-                    </Link>
-                </li>
+              <li
+                className={
+                  "admin-nav-item" +
+                  (isActive("/admin") ? " admin-nav-item--active" : "")
+                }
+              >
+                <Link to="/admin" className="admin-nav-link">
+                  Dashboard
+                </Link>
+              </li>
+
+              <li
+                className={
+                  "admin-nav-item" +
+                  (isActive("/admin/contact-requests")
+                    ? " admin-nav-item--active"
+                    : "")
+                }
+              >
+                <Link to="/admin/contact-requests" className="admin-nav-link">
+                  Contact Requests
+                </Link>
+              </li>
+
+              <li
+                className={
+                  "admin-nav-item" +
+                  (isActive("/admin/projects") ? " admin-nav-item--active" : "")
+                }
+              >
+                <Link to="/admin/projects" className="admin-nav-link">
+                  Projects
+                </Link>
+              </li>
+
+              {/* ✅ NEW: Users */}
+              <li
+                className={
+                  "admin-nav-item" + (isUsersActive() ? " admin-nav-item--active" : "")
+                }
+              >
+                <Link to="/admin/users" className="admin-nav-link">
+                  Users
+                </Link>
+              </li>
+
+              <li
+                className={
+                  "admin-nav-item" +
+                  (isActive("/admin/schedule") ? " admin-nav-item--active" : "")
+                }
+              >
+                <Link to="/admin/schedule" className="admin-nav-link">
+                  Schedule
+                </Link>
+              </li>
             </ul>
           </nav>
 

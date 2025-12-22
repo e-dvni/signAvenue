@@ -21,11 +21,13 @@ import CustomerDayDetail from "./pages/CustomerDayDetail";
 // Admin pages
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminContactRequests from "./pages/AdminContactRequests";
+import AdminContactRequestDetail from "./pages/AdminContactRequestDetail";
 import AdminProjects from "./pages/AdminProjects";
 import AdminProjectFiles from "./pages/AdminProjectFiles";
 import AdminSchedule from "./pages/AdminSchedule";
 import AdminUsers from "./pages/AdminUsers";
 import AdminUserDetail from "./pages/AdminUserDetail";
+import AdminCreateProject from "./pages/AdminCreateProject";
 
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -54,7 +56,6 @@ function App() {
           }
         />
 
-        {/* Customer: project detail + files */}
         <Route
           path="projects/:id"
           element={
@@ -72,7 +73,6 @@ function App() {
           }
         />
 
-        {/* Customer schedule page (list/calendar) */}
         <Route
           path="my-schedule"
           element={
@@ -81,7 +81,6 @@ function App() {
             </ProtectedRoute>
           }
         />
-        {/* optional alias /schedule -> same page */}
         <Route
           path="schedule"
           element={
@@ -90,7 +89,6 @@ function App() {
             </ProtectedRoute>
           }
         />
-        {/* day detail page: click a date on calendar */}
         <Route
           path="schedule/:date"
           element={
@@ -109,6 +107,7 @@ function App() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="admin/contact-requests"
           element={
@@ -117,8 +116,15 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="admin/contact-requests/:id"
+          element={
+            <ProtectedRoute>
+              <AdminContactRequestDetail />
+            </ProtectedRoute>
+          }
+        />
 
-        {/* Admin: projects + files */}
         <Route
           path="admin/projects"
           element={
@@ -153,12 +159,21 @@ function App() {
             </ProtectedRoute>
           }
         />
-
         <Route
           path="admin/users/:id"
           element={
             <ProtectedRoute>
               <AdminUserDetail />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ✅ Admin: create project page for a user */}
+        <Route
+          path="admin/users/:id/create-project"
+          element={
+            <ProtectedRoute>
+              <AdminCreateProject />
             </ProtectedRoute>
           }
         />

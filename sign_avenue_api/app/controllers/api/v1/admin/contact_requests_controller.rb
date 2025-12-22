@@ -2,56 +2,54 @@ module Api
   module V1
     module Admin
       class ContactRequestsController < ApplicationController
+        include Rails.application.routes.url_helpers
+
         before_action :authenticate_user!
         before_action :require_admin!
 
         # GET /api/v1/admin/contact_requests
-        class Api::V1::Admin::ContactRequestsController < ApplicationController
-            include Rails.application.routes.url_helpers
+        def index
+          requests = ContactRequest.order(created_at: :desc)
 
-            def index
-                requests = ContactRequest.order(created_at: :desc)
-
-                render json: requests.map { |cr|
-                    cr.as_json.merge(
-                        file_url: cr.file.attached? ? url_for(cr.file) : nil
-                    )
-                }, status: :ok
-            end
+          render json: requests.map { |cr| contact_request_json(cr) }, status: :ok
         end
 
         # GET /api/v1/admin/contact_requests/:id
+        # Viewing a request will mark it as opened (status: "opened")
         def show
-          contact_request = ContactRequest.find_by(id: params[:id])
+          cr = ContactRequest.find_by(id: params[:id])
+          return render json: { error: "Contact request not found" }, status: :not_found unless cr
 
-          if contact_request
-            render json: contact_request.as_json, status: :ok
-          else
-            render json: { error: "Contact request not found" }, status: :not_found
+          # Auto-mark as opened if it's new/unopened
+          if cr.status.blank? || cr.status.to_s.downcase.in?(%w[new unopened])
+            cr.update(status: "opened")
           end
+
+          render json: contact_request_json(cr), status: :ok
         end
 
         # PATCH/PUT /api/v1/admin/contact_requests/:id
-        # e.g. update status or internal notes later
         def update
-          contact_request = ContactRequest.find_by(id: params[:id])
+          cr = ContactRequest.find_by(id: params[:id])
+          return render json: { error: "Contact request not found" }, status: :not_found unless cr
 
-          unless contact_request
-            return render json: { error: "Contact request not found" }, status: :not_found
-          end
-
-          if contact_request.update(contact_request_params)
-            render json: contact_request.as_json, status: :ok
+          if cr.update(contact_request_params)
+            render json: contact_request_json(cr), status: :ok
           else
-            render json: { errors: contact_request.errors.full_messages }, status: :unprocessable_entity
+            render json: { errors: cr.errors.full_messages }, status: :unprocessable_entity
           end
         end
 
         private
 
         def contact_request_params
-          # You can add :status, :internal_notes etc. when you add those columns
           params.require(:contact_request).permit(:status)
+        end
+
+        def contact_request_json(cr)
+          cr.as_json.merge(
+            file_url: cr.file.attached? ? url_for(cr.file) : nil
+          )
         end
       end
     end

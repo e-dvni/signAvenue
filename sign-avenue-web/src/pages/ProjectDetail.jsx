@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { statusLabel } from "../utils/projectStatus";
 
 const ProjectDetail = () => {
   const { id } = useParams();
@@ -18,7 +19,7 @@ const ProjectDetail = () => {
           },
         });
 
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
 
         if (res.ok) {
           setProject(data);
@@ -40,9 +41,7 @@ const ProjectDetail = () => {
     }
   }, [id, token]);
 
-  if (loading) {
-    return <p>Loading project...</p>;
-  }
+  if (loading) return <p>Loading project...</p>;
 
   if (error) {
     return (
@@ -65,7 +64,10 @@ const ProjectDetail = () => {
   return (
     <section>
       <h1>{project.name}</h1>
-      <p><strong>Status:</strong> {project.status || "Pending"}</p>
+      <p>
+        <strong>Status:</strong>{" "}
+        {project.status ? statusLabel(project.status) : "Pending"}
+      </p>
       <p><strong>Location:</strong> {project.location || "N/A"}</p>
       <p><strong>Install Date:</strong> {project.install_date || "TBD"}</p>
       <p><strong>Description:</strong></p>
