@@ -13,6 +13,9 @@ module Api
 
           project = user.projects.build(project_params)
 
+          # ✅ NEW: Assign creator/assignee (admin who created the project)
+          project.created_by = current_user
+
           if project.save
             # Attach any uploaded files (multipart form-data: files[])
             if params[:files].present?
@@ -48,6 +51,14 @@ module Api
             description: project.description,
             install_date: project.install_date,
             install_slot: project.install_slot,
+
+            # ✅ NEW: include assignee/creator in response
+            created_by: project.created_by && {
+              id: project.created_by.id,
+              name: project.created_by.name,
+              email: project.created_by.email
+            },
+
             created_at: project.created_at,
             updated_at: project.updated_at
           }

@@ -4,11 +4,24 @@ import { useAuth } from "../hooks/useAuth";
 import AdminLayout from "../components/AdminLayout";
 import { PROJECT_STATUSES, statusLabel } from "../utils/projectStatus";
 
+const API_BASE = "http://localhost:3000/api/v1";
+
+// Safe date display
+const fmtDate = (d) => {
+  if (!d) return "—";
+  try {
+    return new Date(d).toLocaleDateString();
+  } catch {
+    return String(d);
+  }
+};
+
+// Safely format "YYYY-MM-DD" + slot into a nice label
 const formatInstallLabel = (install_date, install_slot) => {
   if (!install_date) return "Not scheduled";
 
-  const parts = install_date.split("-");
-  if (parts.length !== 3) return install_date;
+  const parts = String(install_date).split("-");
+  if (parts.length !== 3) return String(install_date);
 
   const [yearStr, monthStr, dayStr] = parts;
   const year = Number(yearStr);
@@ -28,51 +41,104 @@ const formatInstallLabel = (install_date, install_slot) => {
   return slotLabel ? `${dateLabel} (${slotLabel})` : dateLabel;
 };
 
+// Duration in days:
+// - If complete -> created_at to updated_at (rough but good)
+// - Else -> created_at to today
+const durationDays = (createdAt, updatedAt, status) => {
+  if (!createdAt) return "—";
+  const start = new Date(createdAt).getTime();
+  const end =
+    status === "complete" && updatedAt ? new Date(updatedAt).getTime() : Date.now();
+
+  if (Number.isNaN(start) || Number.isNaN(end)) return "—";
+  const days = Math.max(0, Math.round((end - start) / (1000 * 60 * 60 * 24)));
+  return `${days} day${days === 1 ? "" : "s"}`;
+};
+
+const thBase = {
+  padding: 10,
+  fontSize: 11,
+  letterSpacing: 0.3,
+  textTransform: "uppercase",
+  opacity: 0.75,
+  userSelect: "none",
+  whiteSpace: "nowrap",
+};
+
+const clickableTh = {
+  ...thBase,
+  cursor: "pointer",
+};
+
+const tdBase = {
+  padding: 10,
+  fontSize: 13,
+  verticalAlign: "top",
+};
+
+const ellipsisOneLine = {
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  maxWidth: "100%",
+};
+
+const wrapText = {
+  whiteSpace: "normal",
+  wordBreak: "break-word",
+  overflowWrap: "anywhere",
+};
+
 export default function AdminProjects() {
   const { token, user } = useAuth();
 
   const [projects, setProjects] = useState([]);
-  const [expandedId, setExpandedId] = useState(null);
-
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [sortKey, setSortKey] = useState("name"); // name | status | created_at | install_date
-  const [sortDir, setSortDir] = useState("asc");
-
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState(null);
   const [error, setError] = useState(null);
 
-  const apiBase = "http://localhost:3000/api/v1";
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+
+  // Table sorting
+  const [sortKey, setSortKey] = useState("created_at"); // name | created_at | install_date | status | user | assignee
+  const [sortDir, setSortDir] = useState("desc"); // asc | desc
 
   useEffect(() => {
+    let mounted = true;
+
     const fetchProjects = async () => {
       if (!token) {
-        setLoading(false);
+        if (mounted) setLoading(false);
         return;
       }
 
       try {
-        setLoading(true);
-        setError(null);
+        if (mounted) {
+          setLoading(true);
+          setError(null);
+        }
 
-        const res = await fetch(`${apiBase}/admin/projects`, {
+        const res = await fetch(`${API_BASE}/admin/projects`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
         const data = await res.json().catch(() => []);
         if (!res.ok) throw new Error(data?.error || "Unable to load projects.");
 
-        setProjects(Array.isArray(data) ? data : []);
+        if (mounted) setProjects(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error(err);
-        setError(err.message || "Unable to load projects.");
+        if (mounted) setError(err.message || "Unable to load projects.");
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     };
 
     fetchProjects();
+    return () => {
+      mounted = false;
+    };
   }, [token]);
 
   const handleFieldChange = (projectId, patch) => {
@@ -86,7 +152,7 @@ export default function AdminProjects() {
 
     setSavingId(project.id);
     try {
-      const res = await fetch(`${apiBase}/admin/projects/${project.id}`, {
+      const res = await fetch(`${API_BASE}/admin/projects/${project.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -107,9 +173,7 @@ export default function AdminProjects() {
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(
-          data.errors?.join(", ") || data.error || "Update failed"
-        );
+        throw new Error(data.errors?.join(", ") || data.error || "Update failed");
       }
 
       setProjects((prev) => prev.map((p) => (p.id === data.id ? data : p)));
@@ -126,36 +190,68 @@ export default function AdminProjects() {
     let list = [...projects];
 
     if (q) {
-      list = list.filter((p) => (p.name || "").toLowerCase().includes(q));
+      list = list.filter((p) => {
+        const name = (p.name || "").toLowerCase();
+        const userName = (p.user?.name || "").toLowerCase();
+        const userEmail = (p.user?.email || "").toLowerCase();
+        const assigneeName = (p.created_by?.name || "").toLowerCase();
+        const assigneeEmail = (p.created_by?.email || "").toLowerCase();
+
+        return (
+          name.includes(q) ||
+          userName.includes(q) ||
+          userEmail.includes(q) ||
+          assigneeName.includes(q) ||
+          assigneeEmail.includes(q)
+        );
+      });
     }
 
     if (statusFilter) {
-      list = list.filter((p) => p.status === statusFilter);
+      list = list.filter((p) => (p.status || "") === statusFilter);
     }
 
     const dir = sortDir === "asc" ? 1 : -1;
 
     list.sort((a, b) => {
-      // Put "complete" at the bottom regardless of sort
+      // keep "complete" at bottom no matter what
       const aComplete = a.status === "complete";
       const bComplete = b.status === "complete";
       if (aComplete && !bComplete) return 1;
       if (!aComplete && bComplete) return -1;
 
       if (sortKey === "install_date") {
-        const ad = a.install_date ? new Date(a.install_date).getTime() : 0;
-        const bd = b.install_date ? new Date(b.install_date).getTime() : 0;
-        return (ad - bd) * dir;
+        const at = a.install_date ? new Date(a.install_date).getTime() : 0;
+        const bt = b.install_date ? new Date(b.install_date).getTime() : 0;
+        return (at - bt) * dir;
       }
 
       if (sortKey === "created_at") {
-        const ad = a.created_at ? new Date(a.created_at).getTime() : 0;
-        const bd = b.created_at ? new Date(b.created_at).getTime() : 0;
-        return (ad - bd) * dir;
+        const at = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const bt = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return (at - bt) * dir;
       }
 
-      const as = (a?.[sortKey] ?? "").toString().toLowerCase();
-      const bs = (b?.[sortKey] ?? "").toString().toLowerCase();
+      if (sortKey === "user") {
+        const as = (a.user?.name || a.user?.email || "").toLowerCase();
+        const bs = (b.user?.name || b.user?.email || "").toLowerCase();
+        if (as < bs) return -1 * dir;
+        if (as > bs) return 1 * dir;
+        return 0;
+      }
+
+      if (sortKey === "assignee") {
+        const as = (a.created_by?.name || a.created_by?.email || "").toLowerCase();
+        const bs = (b.created_by?.name || b.created_by?.email || "").toLowerCase();
+        if (as < bs) return -1 * dir;
+        if (as > bs) return 1 * dir;
+        return 0;
+      }
+
+      const av = a?.[sortKey];
+      const bv = b?.[sortKey];
+      const as = (av ?? "").toString().toLowerCase();
+      const bs = (bv ?? "").toString().toLowerCase();
       if (as < bs) return -1 * dir;
       if (as > bs) return 1 * dir;
       return 0;
@@ -164,12 +260,20 @@ export default function AdminProjects() {
     return list;
   }, [projects, search, statusFilter, sortKey, sortDir]);
 
+  const toggleSort = (key) => {
+    setSortKey((current) => {
+      if (current === key) {
+        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+        return current;
+      }
+      setSortDir("asc");
+      return key;
+    });
+  };
+
   if (loading) {
     return (
-      <AdminLayout
-        title="Projects"
-        subtitle="All customer sign projects managed by Sign Avenue."
-      >
+      <AdminLayout title="Projects" subtitle="Project tracker for all customers.">
         <section className="admin-section">
           <p className="admin-empty-state">Loading projects...</p>
         </section>
@@ -179,10 +283,7 @@ export default function AdminProjects() {
 
   if (error) {
     return (
-      <AdminLayout
-        title="Projects"
-        subtitle="All customer sign projects managed by Sign Avenue."
-      >
+      <AdminLayout title="Projects" subtitle="Project tracker for all customers.">
         <section className="admin-section">
           <p className="admin-empty-state">{error}</p>
         </section>
@@ -192,14 +293,9 @@ export default function AdminProjects() {
 
   if (!user || !token) {
     return (
-      <AdminLayout
-        title="Projects"
-        subtitle="All customer sign projects managed by Sign Avenue."
-      >
+      <AdminLayout title="Projects" subtitle="Project tracker for all customers.">
         <section className="admin-section">
-          <p className="admin-empty-state">
-            You must be logged in to view this page.
-          </p>
+          <p className="admin-empty-state">You must be logged in to view this page.</p>
         </section>
       </AdminLayout>
     );
@@ -207,10 +303,11 @@ export default function AdminProjects() {
 
   return (
     <AdminLayout title="Projects" subtitle="Project tracker for all customers.">
-      <section className="admin-section">
+      {/* Prevent any page-level horizontal overflow */}
+      <section className="admin-section" style={{ maxWidth: "45%", overflowX: "hidden" }}>
         <div className="admin-section-header">
           <div>
-            <h2 className="admin-section-title">Project Tracker</h2>
+            <h2 className="admin-section-title">Projects</h2>
             <p style={{ margin: "6px 0 0", opacity: 0.75 }}>
               Search, filter, sort, and update project status.
             </p>
@@ -218,6 +315,7 @@ export default function AdminProjects() {
           <span className="admin-section-badge">{visibleProjects.length}</span>
         </div>
 
+        {/* Controls */}
         <div
           style={{
             display: "flex",
@@ -229,14 +327,16 @@ export default function AdminProjects() {
         >
           <input
             type="text"
-            placeholder="Search by project name..."
+            placeholder="Search project, customer, or assignee..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{
-              padding: "0.6rem 0.8rem",
+              padding: "0.8rem 1rem",
               borderRadius: 10,
               border: "1px solid #e5e7eb",
-              minWidth: 260,
+              minWidth: 320,
+              maxWidth: "100%",
+              fontSize: 14,
             }}
           />
 
@@ -244,9 +344,11 @@ export default function AdminProjects() {
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             style={{
-              padding: "0.6rem 0.8rem",
+              padding: "0.7rem 0.9rem",
               borderRadius: 10,
               border: "1px solid #e5e7eb",
+              maxWidth: "100%",
+              fontSize: 14,
             }}
           >
             <option value="">All statuses</option>
@@ -257,177 +359,209 @@ export default function AdminProjects() {
             ))}
           </select>
 
-          <select
-            value={sortKey}
-            onChange={(e) => setSortKey(e.target.value)}
-            style={{
-              padding: "0.6rem 0.8rem",
-              borderRadius: 10,
-              border: "1px solid #e5e7eb",
-            }}
-          >
-            <option value="name">Sort: Name</option>
-            <option value="status">Sort: Status</option>
-            <option value="created_at">Sort: Date created</option>
-            <option value="install_date">Sort: Install date</option>
-          </select>
-
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-          >
-            {sortDir === "asc" ? "Asc" : "Desc"}
-          </button>
+          <div style={{ fontSize: 12, opacity: 0.75 }}>
+            Sorting: <strong>{sortKey}</strong> ({sortDir})
+          </div>
         </div>
 
-        {visibleProjects.length === 0 ? (
-          <p className="admin-empty-state" style={{ marginTop: 14 }}>
-            No projects match your filters.
-          </p>
-        ) : (
-          <ul className="admin-list" style={{ marginTop: 14 }}>
-            {visibleProjects.map((p) => {
-              const isExpanded = expandedId === p.id;
+        {/* Card */}
+        {/* Scroll area (ONLY place that scrolls sideways) */}
+        <div
+          style={{
+            marginTop: 14,
+            border: "1px solid #e5e7eb",
+            borderRadius: 16,
+            background: "white",
+            overflow: "hidden",     // keeps the card clipped/rounded
+            maxWidth: "100%",
+            minWidth: 0,            // IMPORTANT: prevents flex parents from forcing width
+          }}
+        >
+          {/* Scroll area: THIS fits in the browser and scrolls internally */}
+          <div
+            style={{
+              width: "100%",
+              maxWidth: "100%",
+              minWidth: 0,               // IMPORTANT
+              overflowX: "auto",         // horizontal scroll INSIDE here
+              overflowY: "auto",         // vertical scroll INSIDE here
+              maxHeight: 480,            // your scroll height
+              WebkitOverflowScrolling: "touch",
+            }}
+          >
+            {visibleProjects.length === 0 ? (
+              <div style={{ padding: 14 }}>No projects match your filters.</div>
+            ) : (
+              <table
+                style={{
+                  width: "100%",          // ✅ wrapper width (fits browser)
+                  minWidth: 2200,         // ✅ forces internal horizontal scrolling
+                  borderCollapse: "collapse",
+                  tableLayout: "fixed",
+                }}
+              >
+                <colgroup>
+                  <col style={{ width: 80 }} /> {/* Project Name */}
+                  <col style={{ width: 60 }} /> {/* Start Date */}
+                  <col style={{ width: 75 }} /> {/* Installation Date */}
+                  <col style={{ width: 60 }} /> {/* Assignee */}
+                  <col style={{ width: 80 }} /> {/* Customer */}
+                  <col style={{ width: 60 }} /> {/* Status */}
+                  <col style={{ width: 60 }} /> {/* Invoice */}
+                  <col style={{ width: 75 }} /> {/* Duration */}
+                  <col style={{ width: 60 }} /> {/* Actions */}
+                </colgroup>
 
-              return (
-                <li key={p.id} className="admin-list-item">
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 12,
-                      alignItems: "flex-start",
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setExpandedId((cur) => (cur === p.id ? null : p.id))
-                      }
-                      style={{
-                        flex: 1,
-                        textAlign: "left",
-                        background: "transparent",
-                        border: "none",
-                        padding: 0,
-                        cursor: "pointer",
-                      }}
-                    >
-                      <p className="admin-list-item-title">
-                        {p.name || `Project #${p.id}`}
-                        {p.status && (
-                          <span className="admin-status-badge">
-                            {statusLabel(p.status)}
-                          </span>
-                        )}
-                      </p>
+                <thead>
+                  <tr style={{ background: "#f9fafb", textAlign: "left" }}>
+                    <th style={clickableTh} onClick={() => toggleSort("name")}>Project Name</th>
+                    <th style={clickableTh} onClick={() => toggleSort("created_at")}>Start Date</th>
+                    <th style={clickableTh} onClick={() => toggleSort("install_date")}>Installation Date</th>
+                    <th style={clickableTh} onClick={() => toggleSort("assignee")}>Assignee</th>
+                    <th style={clickableTh} onClick={() => toggleSort("user")}>Customer</th>
+                    <th style={clickableTh} onClick={() => toggleSort("status")}>Status</th>
+                    <th style={thBase}>Invoice</th>
+                    <th style={thBase}>Duration</th>
+                    <th style={thBase}>Actions</th>
+                  </tr>
+                </thead>
 
-                      <p className="admin-list-item-subtitle">
-                        {p.user
-                          ? `${p.user.name} (${p.user.email})`
-                          : "Unassigned"}
-                      </p>
+                <tbody>
+                  {visibleProjects.map((p) => {
+                    const customerName = p.user?.name || "—";
+                    const customerEmail = p.user?.email || "";
+                    const canViewUser = Boolean(p.user?.id);
 
-                      <p className="admin-list-item-body">
-                        Install:{" "}
-                        {formatInstallLabel(p.install_date, p.install_slot)}
-                      </p>
+                    const assigneeName = p.created_by?.name || "—";
+                    const assigneeEmail = p.created_by?.email || "";
 
-                      {p.location && (
-                        <p className="admin-list-item-body">
-                          Location: {p.location}
-                        </p>
-                      )}
-                    </button>
+                    return (
+                      <tr key={p.id} style={{ borderTop: "1px solid #eef2f7" }}>
+                        {/* Project */}
+                        <td style={tdBase}>
+                          <div style={{ fontWeight: 800, ...ellipsisOneLine }}>
+                            {p.name || `Project #${p.id}`}
+                          </div>
+                          {p.location ? (
+                            <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6, ...ellipsisOneLine }}>
+                              {p.location}
+                            </div>
+                          ) : null}
+                        </td>
 
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 10,
-                        alignItems: "center",
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <label
-                        style={{
-                          fontSize: "0.85rem",
-                          display: "inline-flex",
-                          flexDirection: "column",
-                          gap: "0.25rem",
-                        }}
-                      >
-                        Status
-                        <select
-                          value={p.status || ""}
-                          onChange={(e) =>
-                            handleFieldChange(p.id, {
-                              status: e.target.value,
-                            })
-                          }
-                          style={{
-                            fontSize: "0.85rem",
-                            padding: "0.35rem 0.5rem",
-                            borderRadius: 8,
-                          }}
-                        >
-                          {PROJECT_STATUSES.map((s) => (
-                            <option key={s} value={s}>
-                              {statusLabel(s)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                        {/* Start */}
+                        <td style={{ ...tdBase, whiteSpace: "nowrap" }}>{fmtDate(p.created_at)}</td>
 
-                      <button
-                        type="button"
-                        onClick={() => handleSaveProject(p)}
-                        disabled={savingId === p.id}
-                        className="btn btn-primary"
-                        style={{ fontSize: "0.85rem" }}
-                      >
-                        {savingId === p.id ? "Saving..." : "Save"}
-                      </button>
-                    </div>
-                  </div>
+                        {/* Install */}
+                        <td style={tdBase}>
+                          <div style={{ ...wrapText, fontSize: 13 }}>
+                            {formatInstallLabel(p.install_date, p.install_slot)}
+                          </div>
+                        </td>
 
-                  {isExpanded && (
-                    <div
-                      style={{
-                        marginTop: 12,
-                        paddingTop: 12,
-                        borderTop: "1px solid #e5e7eb",
-                      }}
-                    >
-                      {p.description && (
-                        <p className="admin-list-item-body" style={{ marginTop: 6 }}>
-                          <strong>Description:</strong> {p.description}
-                        </p>
-                      )}
+                        {/* Assignee */}
+                        <td style={tdBase}>
+                          <div style={{ fontWeight: 700, ...ellipsisOneLine }}>{assigneeName}</div>
+                          <div style={{ fontSize: 12, opacity: 0.7, ...ellipsisOneLine }}>
+                            {assigneeEmail || " "}
+                          </div>
+                        </td>
 
-                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
-                        <Link
-                          className="btn btn-secondary"
-                          to={`/admin/projects/${p.id}/files`}
-                        >
-                          Manage Files
-                        </Link>
+                        {/* Customer */}
+                        <td style={tdBase}>
+                          <div style={{ fontWeight: 700, ...ellipsisOneLine }}>{customerName}</div>
+                          <div style={{ fontSize: 12, opacity: 0.7, ...ellipsisOneLine }}>{customerEmail}</div>
+                          <div style={{ marginTop: 8 }}>
+                            {canViewUser ? (
+                              <Link
+                                to={`/admin/users/${p.user.id}`}
+                                className="btn btn-secondary"
+                                style={{ fontSize: 12, padding: "6px 10px" }}
+                              >
+                                View Profile
+                              </Link>
+                            ) : (
+                              <span style={{ fontSize: 12, opacity: 0.7 }}>—</span>
+                            )}
+                          </div>
+                        </td>
 
-                        <button
-                          type="button"
-                          className="btn btn-secondary"
-                          onClick={() => setExpandedId(null)}
-                        >
-                          Close
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
+                        {/* Status */}
+                        <td style={tdBase}>
+                          <select
+                            value={p.status || "draft"}
+                            onChange={(e) => handleFieldChange(p.id, { status: e.target.value })}
+                            style={{
+                              width: "100%",
+                              padding: "0.55rem 0.65rem",
+                              borderRadius: 10,
+                              border: "1px solid #e5e7eb",
+                              fontWeight: 800,
+                              fontSize: 13,
+                            }}
+                          >
+                            {PROJECT_STATUSES.map((s) => (
+                              <option key={s} value={s}>
+                                {statusLabel(s)}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+
+                        {/* Invoice */}
+                        <td style={tdBase}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            style={{
+                              width: "100%",
+                              fontSize: 12,
+                              padding: "7px 8px",
+                              opacity: 0.6,
+                              cursor: "not-allowed",
+                            }}
+                            disabled
+                            title="Invoice system coming soon"
+                          >
+                            View Invoice
+                          </button>
+                        </td>
+
+                        {/* Duration */}
+                        <td style={{ ...tdBase, whiteSpace: "nowrap" }}>
+                          {durationDays(p.created_at, p.updated_at, p.status)}
+                        </td>
+
+                        {/* Actions */}
+                        <td style={tdBase}>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <Link
+                              className="btn btn-secondary"
+                              to={`/admin/projects/${p.id}/files`}
+                              style={{ fontSize: 12, padding: "6px 10px" }}
+                            >
+                              Files
+                            </Link>
+
+                            <button
+                              type="button"
+                              className="btn btn-primary"
+                              onClick={() => handleSaveProject(p)}
+                              disabled={savingId === p.id}
+                              style={{ fontSize: 12, padding: "6px 10px" }}
+                            >
+                              {savingId === p.id ? "Saving..." : "Save"}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
       </section>
     </AdminLayout>
   );

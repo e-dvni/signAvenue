@@ -7,17 +7,26 @@ export const PROJECT_STATUSES = [
   "cancelled",
 ];
 
-export const statusLabel = (value) => {
-  const map = {
-    draft: "Draft",
-    acquiring_permits: "Acquiring Permits",
-    production: "Production",
-    installation: "Installation",
-    complete: "Complete",
-    cancelled: "Cancelled",
-  };
-
-  return map[value] || "—";
+export const statusLabel = (status) => {
+  switch (status) {
+    case "draft":
+      return "Draft";
+    case "acquiring_permits":
+      return "Acquiring Permits";
+    case "production":
+      return "Production";
+    case "installation":
+      return "Installation";
+    case "complete":
+      return "Complete";
+    case "cancelled":
+      return "Cancelled";
+    default:
+      return status
+        ? status
+            .toString()
+            .replace(/[_-]+/g, " ")
+            .replace(/\b\w/g, (c) => c.toUpperCase())
+        : "—";
+  }
 };
-
-export const canCustomerSchedule = (status) => status === "installation";

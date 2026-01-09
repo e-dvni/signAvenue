@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2025_12_22_141617) do
+ActiveRecord::Schema[8.1].define(version: 2025_12_22_160319) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -56,6 +56,7 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_22_141617) do
 
   create_table "projects", force: :cascade do |t|
     t.datetime "created_at", null: false
+    t.bigint "created_by_id"
     t.text "description"
     t.date "install_date"
     t.string "install_slot"
@@ -64,6 +65,7 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_22_141617) do
     t.string "status"
     t.datetime "updated_at", null: false
     t.bigint "user_id"
+    t.index ["created_by_id"], name: "index_projects_on_created_by_id"
     t.index ["user_id"], name: "index_projects_on_user_id"
   end
 
@@ -89,4 +91,5 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_22_141617) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "projects", "users"
+  add_foreign_key "projects", "users", column: "created_by_id"
 end

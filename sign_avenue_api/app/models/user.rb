@@ -4,7 +4,14 @@ require "bcrypt"
 class User < ApplicationRecord
   has_secure_password
 
+  # ---- Associations ----
   has_many :projects, dependent: :nullify
+
+  # ✅ NEW: projects this user created (admin assignee)
+  has_many :created_projects,
+           class_name: "Project",
+           foreign_key: :created_by_id,
+           dependent: :nullify
 
   # ---- Constants ----
   CODE_TTL = 10.minutes
@@ -28,7 +35,8 @@ class User < ApplicationRecord
     now = Time.current
 
     # Reset rolling window if missing or older than 1 hour
-    if email_confirmation_window_started_at.nil? || email_confirmation_window_started_at < now - 1.hour
+    if email_confirmation_window_started_at.nil? ||
+       email_confirmation_window_started_at < now - 1.hour
       self.email_confirmation_window_started_at = now
       self.email_confirmation_send_count = 0
     end

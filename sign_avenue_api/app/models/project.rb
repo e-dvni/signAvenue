@@ -1,5 +1,9 @@
 class Project < ApplicationRecord
   belongs_to :user
+
+  # Admin (User) who created the project
+  belongs_to :created_by, class_name: "User", optional: true
+
   has_many_attached :files
 
   STATUSES = %w[
@@ -13,11 +17,9 @@ class Project < ApplicationRecord
 
   validates :name, presence: true
   validates :status, inclusion: { in: STATUSES }, allow_nil: true
-
-  # keep if you still use install_slot somewhere
   validates :install_slot, inclusion: { in: %w[am pm] }, allow_nil: true
 
-  # ✅ customers can schedule only in Installation stage
+  # Customer can schedule when project is in Installation phase
   def installable?
     status == "installation"
   end

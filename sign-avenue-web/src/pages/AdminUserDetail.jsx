@@ -96,7 +96,7 @@ export default function AdminUserDetail() {
   return (
     <AdminLayout title="User Profile" subtitle="User details and project history.">
       <div style={{ padding: 24, maxWidth: 1100, margin: "0 auto" }}>
-        <p style={{ marginTop: 0 }}>
+        <p style={{ marginTop: 0, width: 850 }}>
           <Link to="/admin/users">← Back to Users</Link>
         </p>
 

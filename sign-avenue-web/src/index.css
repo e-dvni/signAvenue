@@ -45,6 +45,10 @@ body {
   color: var(--sa-text-main);
 }
 
+html, body {
+  overflow-x: hidden;
+}
+
 img {
   max-width: 100%;
   display: block;
